@@ -32,11 +32,11 @@ jobs:
         with:
           node-version: "18"
 
-      - name: Lint JavaScript (eslint)
+      -  name: Lint JavaScript (eslint)
         run: |
           cd frontend
           npm install
-          npx eslint app.js
+          ./node_modules/.bin/eslint app.js
 
       - name: Lint Dockerfiles (hadolint)
         uses: hadolint/hadolint-action@v3.1.0
