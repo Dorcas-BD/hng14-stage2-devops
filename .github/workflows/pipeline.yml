@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [main]
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
 
   # ─────────────────────────────────────────────
@@ -30,9 +33,9 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: "18"
+          node-version: "20"
 
-      -  name: Lint JavaScript (eslint)
+      - name: Lint JavaScript (eslint)
         run: |
           cd frontend
           npm install
@@ -132,7 +135,6 @@ jobs:
             localhost:5000/frontend:${{ github.sha }}
             localhost:5000/frontend:latest
 
-      # Save the SHA so later jobs can pull the right tags
       - name: Save image SHA
         run: echo "${{ github.sha }}" > sha.txt
 
@@ -228,7 +230,7 @@ jobs:
           for i in $(seq 1 30); do
             FRONTEND=$(docker inspect --format='{{.State.Health.Status}}' $(docker compose ps -q frontend) 2>/dev/null || echo "starting")
             API=$(docker inspect --format='{{.State.Health.Status}}' $(docker compose ps -q api) 2>/dev/null || echo "starting")
-            echo "Attempt $i — frontend: $FRONTEND, api: $API"
+            echo "Attempt $i - frontend: $FRONTEND, api: $API"
             if [ "$FRONTEND" = "healthy" ] && [ "$API" = "healthy" ]; then
               echo "All services healthy!"
               break
@@ -238,17 +240,15 @@ jobs:
 
       - name: Submit a job and poll until completed
         run: |
-          # Submit job through the frontend service
           SUBMIT=$(curl -s -X POST http://localhost:3000/submit)
           echo "Submit response: $SUBMIT"
           JOB_ID=$(echo $SUBMIT | python3 -c "import sys,json; print(json.load(sys.stdin)['job_id'])")
           echo "Job ID: $JOB_ID"
 
-          # Poll for up to 30 seconds
           for i in $(seq 1 15); do
             STATUS_RESP=$(curl -s http://localhost:3000/status/$JOB_ID)
             STATUS=$(echo $STATUS_RESP | python3 -c "import sys,json; print(json.load(sys.stdin).get('status','unknown'))")
-            echo "Poll $i — status: $STATUS"
+            echo "Poll $i - status: $STATUS"
             if [ "$STATUS" = "completed" ]; then
               echo "Job completed successfully!"
               exit 0
@@ -282,33 +282,27 @@ jobs:
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
         run: |
-          # Write SSH key
           echo "$DEPLOY_KEY" > deploy_key
           chmod 600 deploy_key
 
-          # Copy new compose file and env example to server
           scp -i deploy_key -o StrictHostKeyChecking=no \
             docker-compose.yml \
             ${DEPLOY_USER}@${DEPLOY_HOST}:/app/
 
-          # Run rolling update script on server
           ssh -i deploy_key -o StrictHostKeyChecking=no \
             ${DEPLOY_USER}@${DEPLOY_HOST} << 'ENDSSH'
             set -e
             cd /app
 
-            # Pull latest images
             docker compose pull
 
-            # Start new containers — old ones keep serving during health check window
             docker compose up -d --no-deps --build api
             docker compose up -d --no-deps --build worker
             docker compose up -d --no-deps --build frontend
 
-            # Wait up to 60 seconds for new containers to pass health check
             for SERVICE in api frontend; do
               CONTAINER=$(docker compose ps -q $SERVICE)
-              echo "Waiting for $SERVICE ($CONTAINER) to be healthy..."
+              echo "Waiting for $SERVICE to be healthy..."
               for i in $(seq 1 12); do
                 HEALTH=$(docker inspect --format='{{.State.Health.Status}}' $CONTAINER)
                 echo "  $SERVICE health: $HEALTH (attempt $i/12)"
@@ -317,8 +311,7 @@ jobs:
                   break
                 fi
                 if [ $i -eq 12 ]; then
-                  echo "  $SERVICE failed health check! Aborting deploy, leaving old container."
-                  # Restart previous version
+                  echo "  $SERVICE failed health check! Aborting."
                   docker compose up -d --no-deps $SERVICE
                   exit 1
                 fi
