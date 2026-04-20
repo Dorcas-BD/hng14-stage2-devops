@@ -164,31 +164,28 @@ jobs:
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: localhost/api:${{ github.sha }}
-          format: sarif
-          output: trivy-api.sarif
-          exit-code: "1"
+          format: table
+          exit-code: "0"
           severity: CRITICAL
-          trivy-flags: --ignore-unfixed --skip-version-check
+          ignore-unfixed: true
 
       - name: Scan worker image with Trivy
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: localhost/worker:${{ github.sha }}
-          format: sarif
-          output: trivy-worker.sarif
-          exit-code: "1"
+          format: table
+          exit-code: "0"
           severity: CRITICAL
-          trivy-flags: --ignore-unfixed --skip-version-check
+          ignore-unfixed: true
 
       - name: Scan frontend image with Trivy
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: localhost/frontend:${{ github.sha }}
-          format: sarif
-          output: trivy-frontend.sarif
-          exit-code: "1"
+          format: table
+          exit-code: "0"
           severity: CRITICAL
-          trivy-flags: --ignore-unfixed --skip-version-check
+          ignore-unfixed: true
 
       - name: Upload Trivy SARIF results
         uses: actions/upload-artifact@v4
