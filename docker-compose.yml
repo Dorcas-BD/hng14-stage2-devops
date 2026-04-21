@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
 
   redis:
@@ -20,7 +18,7 @@ services:
     restart: unless-stopped
 
   api:
-    image: ghcr.io/${GITHUB_REPOSITORY}/api:latest
+    image: ghcr.io/dorcas-bd/hng14-stage2-devops/api:latest
     environment:
       - REDIS_HOST=redis
       - REDIS_PASSWORD=${REDIS_PASSWORD}
@@ -43,7 +41,7 @@ services:
     restart: unless-stopped
 
   worker:
-    image: ghcr.io/${GITHUB_REPOSITORY}/worker:latest
+    image: ghcr.io/dorcas-bd/hng14-stage2-devops/worker:latest
     environment:
       - REDIS_HOST=redis
       - REDIS_PASSWORD=${REDIS_PASSWORD}
@@ -60,7 +58,7 @@ services:
     restart: unless-stopped
 
   frontend:
-    image: ghcr.io/${GITHUB_REPOSITORY}/frontend:latest
+    image: ghcr.io/dorcas-bd/hng14-stage2-devops/frontend:latest
     ports:
       - "${FRONTEND_PORT:-3000}:3000"
     environment:
