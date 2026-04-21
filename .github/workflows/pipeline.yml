@@ -299,12 +299,30 @@ jobs:
             set -e
             cd /app
 
-            export REDIS_PASSWORD="${REDIS_PASSWORD}"
-            export GITHUB_REPOSITORY=$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')
+            # Write .env file so Docker Compose can read variables
+            echo "REDIS_PASSWORD=${REDIS_PASSWORD}" > /app/.env
+            echo "FRONTEND_PORT=3000" >> /app/.env
+            echo "GITHUB_REPOSITORY=$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')" >> /app/.env
 
             echo "${GITHUB_TOKEN}" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
 
             docker compose pull
+
+            docker compose up -d --no-deps redis
+            echo "Waiting for Redis to be healthy..."
+            for i in \$(seq 1 12); do
+              HEALTH=\$(docker inspect --format='{{.State.Health.Status}}' \$(docker compose ps -q redis) 2>/dev/null || echo "starting")
+              echo "  Redis health: \$HEALTH (attempt \$i/12)"
+              if [ "\$HEALTH" = "healthy" ]; then
+                echo "  Redis is healthy."
+                break
+              fi
+              if [ \$i -eq 12 ]; then
+                echo "  Redis failed health check! Aborting."
+                exit 1
+              fi
+              sleep 5
+            done
 
             docker compose up -d --no-deps api
             docker compose up -d --no-deps worker
