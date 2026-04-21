@@ -20,7 +20,7 @@ services:
     restart: unless-stopped
 
   api:
-    build: ./api
+    image: ghcr.io/${GITHUB_REPOSITORY}/api:latest
     environment:
       - REDIS_HOST=redis
       - REDIS_PASSWORD=${REDIS_PASSWORD}
@@ -43,7 +43,7 @@ services:
     restart: unless-stopped
 
   worker:
-    build: ./worker
+    image: ghcr.io/${GITHUB_REPOSITORY}/worker:latest
     environment:
       - REDIS_HOST=redis
       - REDIS_PASSWORD=${REDIS_PASSWORD}
@@ -60,7 +60,7 @@ services:
     restart: unless-stopped
 
   frontend:
-    build: ./frontend
+    image: ghcr.io/${GITHUB_REPOSITORY}/frontend:latest
     ports:
       - "${FRONTEND_PORT:-3000}:3000"
     environment:

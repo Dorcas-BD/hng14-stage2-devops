@@ -8,6 +8,8 @@ on:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ghcr.io/${{ github.repository }}
 
 jobs:
 
@@ -94,19 +96,19 @@ jobs:
     name: Build
     runs-on: ubuntu-latest
     needs: test
-    services:
-      registry:
-        image: registry:2
-        ports:
-          - 5000:5000
 
     steps:
       - uses: actions/checkout@v4
 
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-        with:
-          driver-opts: network=host
 
       - name: Build and push API image
         uses: docker/build-push-action@v5
@@ -114,8 +116,8 @@ jobs:
           context: ./api
           push: true
           tags: |
-            localhost:5000/api:${{ github.sha }}
-            localhost:5000/api:latest
+            ghcr.io/${{ github.repository }}/api:${{ github.sha }}
+            ghcr.io/${{ github.repository }}/api:latest
 
       - name: Build and push worker image
         uses: docker/build-push-action@v5
@@ -123,8 +125,8 @@ jobs:
           context: ./worker
           push: true
           tags: |
-            localhost:5000/worker:${{ github.sha }}
-            localhost:5000/worker:latest
+            ghcr.io/${{ github.repository }}/worker:${{ github.sha }}
+            ghcr.io/${{ github.repository }}/worker:latest
 
       - name: Build and push frontend image
         uses: docker/build-push-action@v5
@@ -132,16 +134,8 @@ jobs:
           context: ./frontend
           push: true
           tags: |
-            localhost:5000/frontend:${{ github.sha }}
-            localhost:5000/frontend:latest
-
-      - name: Save image SHA
-        run: echo "${{ github.sha }}" > sha.txt
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: image-sha
-          path: sha.txt
+            ghcr.io/${{ github.repository }}/frontend:${{ github.sha }}
+            ghcr.io/${{ github.repository }}/frontend:latest
 
   # ─────────────────────────────────────────────
   # STAGE 4: SECURITY SCAN
@@ -154,36 +148,46 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build images for scanning
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull images for scanning
         run: |
-          docker build -t localhost/api:${{ github.sha }} ./api
-          docker build -t localhost/worker:${{ github.sha }} ./worker
-          docker build -t localhost/frontend:${{ github.sha }} ./frontend
+          docker pull ghcr.io/${{ github.repository }}/api:${{ github.sha }}
+          docker pull ghcr.io/${{ github.repository }}/worker:${{ github.sha }}
+          docker pull ghcr.io/${{ github.repository }}/frontend:${{ github.sha }}
 
       - name: Scan API image with Trivy
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: localhost/api:${{ github.sha }}
-          format: table
-          exit-code: "0"
+          image-ref: ghcr.io/${{ github.repository }}/api:${{ github.sha }}
+          format: sarif
+          output: trivy-api.sarif
+          exit-code: "1"
           severity: CRITICAL
           ignore-unfixed: true
 
       - name: Scan worker image with Trivy
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: localhost/worker:${{ github.sha }}
-          format: table
-          exit-code: "0"
+          image-ref: ghcr.io/${{ github.repository }}/worker:${{ github.sha }}
+          format: sarif
+          output: trivy-worker.sarif
+          exit-code: "1"
           severity: CRITICAL
           ignore-unfixed: true
 
       - name: Scan frontend image with Trivy
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: localhost/frontend:${{ github.sha }}
-          format: table
-          exit-code: "0"
+          image-ref: ghcr.io/${{ github.repository }}/frontend:${{ github.sha }}
+          format: sarif
+          output: trivy-frontend.sarif
+          exit-code: "1"
           severity: CRITICAL
           ignore-unfixed: true
 
@@ -270,6 +274,7 @@ jobs:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           echo "$DEPLOY_KEY" > deploy_key
           chmod 600 deploy_key
@@ -279,29 +284,34 @@ jobs:
             ${DEPLOY_USER}@${DEPLOY_HOST}:/app/
 
           ssh -i deploy_key -o StrictHostKeyChecking=no \
-            ${DEPLOY_USER}@${DEPLOY_HOST} << 'ENDSSH'
+            ${DEPLOY_USER}@${DEPLOY_HOST} << ENDSSH
             set -e
             cd /app
 
+            export REDIS_PASSWORD="${REDIS_PASSWORD}"
+            export GITHUB_REPOSITORY="${GITHUB_REPOSITORY}"
+
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
             docker compose pull
 
-            docker compose up -d --no-deps --build api
-            docker compose up -d --no-deps --build worker
-            docker compose up -d --no-deps --build frontend
+            docker compose up -d --no-deps api
+            docker compose up -d --no-deps worker
+            docker compose up -d --no-deps frontend
 
             for SERVICE in api frontend; do
-              CONTAINER=$(docker compose ps -q $SERVICE)
-              echo "Waiting for $SERVICE to be healthy..."
-              for i in $(seq 1 12); do
-                HEALTH=$(docker inspect --format='{{.State.Health.Status}}' $CONTAINER)
-                echo "  $SERVICE health: $HEALTH (attempt $i/12)"
-                if [ "$HEALTH" = "healthy" ]; then
-                  echo "  $SERVICE is healthy."
+              CONTAINER=\$(docker compose ps -q \$SERVICE)
+              echo "Waiting for \$SERVICE to be healthy..."
+              for i in \$(seq 1 12); do
+                HEALTH=\$(docker inspect --format='{{.State.Health.Status}}' \$CONTAINER)
+                echo "  \$SERVICE health: \$HEALTH (attempt \$i/12)"
+                if [ "\$HEALTH" = "healthy" ]; then
+                  echo "  \$SERVICE is healthy."
                   break
                 fi
-                if [ $i -eq 12 ]; then
-                  echo "  $SERVICE failed health check! Aborting."
-                  docker compose up -d --no-deps $SERVICE
+                if [ \$i -eq 12 ]; then
+                  echo "  \$SERVICE failed health check! Rolling back."
+                  docker compose up -d --no-deps \$SERVICE
                   exit 1
                 fi
                 sleep 5
