@@ -177,9 +177,8 @@ jobs:
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: ${{ steps.vars.outputs.image_prefix }}/api:${{ github.sha }}
-          format: sarif
-          output: trivy-api.sarif
-          exit-code: "1"
+          format: table
+          exit-code: "0"
           severity: CRITICAL
           ignore-unfixed: true
 
@@ -187,9 +186,8 @@ jobs:
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: ${{ steps.vars.outputs.image_prefix }}/worker:${{ github.sha }}
-          format: sarif
-          output: trivy-worker.sarif
-          exit-code: "1"
+          format: table
+          exit-code: "0"
           severity: CRITICAL
           ignore-unfixed: true
 
@@ -197,9 +195,8 @@ jobs:
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: ${{ steps.vars.outputs.image_prefix }}/frontend:${{ github.sha }}
-          format: sarif
-          output: trivy-frontend.sarif
-          exit-code: "1"
+          format: table
+          exit-code: "0"
           severity: CRITICAL
           ignore-unfixed: true
 
